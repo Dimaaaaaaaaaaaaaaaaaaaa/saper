@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Сапер</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background-color: #f4f4f4;
+      margin: 0;
+      position: relative;
+    }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      gap: 2px;
+      max-width: 90vmin;
+      max-height: 90vmin;
+      width: 100%;
+      height: 100%;
+      background-color: #444;
+      border: 2px solid #333;
+    }
+    .cell {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      height: 100%;
+      background-color: #ddd;
+      font-size: 20px;
+      cursor: pointer;
+      border: 1px solid #888;
+    }
+    .cell.clicked {
+      background-color: #fff;
+    }
+    .cell.flagged {
+      background-color: #f00;
+    }
+    .cell.mined {
+      background-color: red;
+    }
+    .cell.safe {
+      background-color: #cfcfcf;
+    }
+    .message {
+      position: absolute;
+      top: 10%;
+      font-size: 24px;
+      color: green;
+      text-align: center;
+      display: none;
+    }
+    .message.show {
+      display: block;
+    }
+    .button {
+      padding: 10px 20px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 18px;
+      position: absolute;
+      bottom: 20px;
+      transition: background-color 0.3s, transform 0.1s ease-in-out;
+    }
+    .button:hover {
+      background-color: #218838;
+    }
+    .button:active {
+      background-color: #1e7e34;
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body>
+  <div class="message" id="message">Вы выиграли!</div>
+  <button class="button" id="restartButton">Перезапустить игру</button>
+  <div id="board"></div>
+
+  <script>
+    const rows = 10;
+    const cols = 10;
+    const totalMines = 20;
+    const boardElement = document.getElementById('board');
+    const messageElement = document.getElementById('message');
+    const restartButton = document.getElementById('restartButton');
+
+    let board = [];
+    let gameOver = false;
+
+    // Инициализация доски
+    function createBoard() {
+      board = [];
+      gameOver = false;
+      messageElement.classList.remove('show');
+      boardElement.innerHTML = '';
+      for (let r = 0; r < rows; r++) {
+        let row = [];
+        for (let c = 0; c < cols; c++) {
+          const cell = document.createElement('div');
+          cell.classList.add('cell');
+          cell.dataset.row = r;
+          cell.dataset.col = c;
+          cell.addEventListener('click', handleClick);
+          cell.addEventListener('contextmenu', handleRightClick);
+          boardElement.appendChild(cell);
+          row.push({ element: cell, isMine: false, isClicked: false, isFlagged: false, adjacentMines: 0 });
+        }
+        board.push(row);
+      }
+
+      placeMines();
+      calculateAdjacentMines();
+    }
+
+    // Размещение мин на доске
+    function placeMines() {
+      let minesPlaced = 0;
+      while (minesPlaced < totalMines) {
+        const row = Math.floor(Math.random() * rows);
+        const col = Math.floor(Math.random() * cols);
+        const cell = board[row][col];
+        if (!cell.isMine) {
+          cell.isMine = true;
+          minesPlaced++;
+        }
+      }
+    }
+
+    // Расчет количества мин рядом с каждой клеткой
+    function calculateAdjacentMines() {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cell = board[r][c];
+          if (cell.isMine) continue;
+          let adjacentMines = 0;
+          for (let i = -1; i <= 1; i++) {
+            for (let j = -1; j <= 1; j++) {
+              const newRow = r + i;
+              const newCol = c + j;
+              if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols) {
+                if (board[newRow][newCol].isMine) adjacentMines++;
+              }
+            }
+          }
+          cell.adjacentMines = adjacentMines;
+        }
+      }
+    }
+
+    // Обработка клика по клетке
+    function handleClick(e) {
+      if (gameOver) return;
+
+      const row = e.target.dataset.row;
+      const col = e.target.dataset.col;
+      const cell = board[row][col];
+
+      if (cell.isClicked || cell.isFlagged) return;
+
+      cell.isClicked = true;
+      e.target.classList.add('clicked');
+
+      if (cell.isMine) {
+        e.target.classList.add('mined');
+        gameOver = true;
+        messageElement.textContent = 'Вы проиграли!';
+        messageElement.classList.add('show');
+      } else {
+        e.target.classList.add('safe');
+        if (cell.adjacentMines === 0) {
+          revealAdjacentCells(row, col);
+        }
+      }
+
+      checkWin();
+    }
+
+    // Обработка правого клика (пометка флага)
+    function handleRightClick(e) {
+      e.preventDefault();
+      if (gameOver) return;
+
+      const row = e.target.dataset.row;
+      const col = e.target.dataset.col;
+      const cell = board[row][col];
+
+      if (cell.isClicked) return;
+
+      cell.isFlagged = !cell.isFlagged;
+      e.target.classList.toggle('flagged');
+    }
+
+    // Раскрытие соседних клеток
+    function revealAdjacentCells(row, col) {
+      for (let i = -1; i <= 1; i++) {
+        for (let j = -1; j <= 1; j++) {
+          const newRow = row + i;
+          const newCol = col + j;
+          if (newRow >= 0 && newRow < rows && newCol >= 0 && newCol < cols) {
+            const cell = board[newRow][newCol];
+            if (!cell.isClicked && !cell.isMine) {
+              const cellElement = board[newRow][newCol].element;
+              handleClick({ target: cellElement });
+            }
+          }
+        }
+      }
+    }
+
+    // Проверка на победу
+    function checkWin() {
+      let flaggedMines = 0;
+      let clickedCells = 0;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const cell = board[r][c];
+          if (cell.isFlagged && cell.isMine) flaggedMines++;
+          if (cell.isClicked) clickedCells++;
+        }
+      }
+
+      if (flaggedMines === totalMines && clickedCells === rows * cols - totalMines) {
+        gameOver = true;
+        messageElement.textContent = 'Вы выиграли!';
+        messageElement.classList.add('show');
+      }
+    }
+
+    // Перезапуск игры
+    restartButton.addEventListener('click', createBoard);
+
+    // Запуск игры
+    createBoard();
+  </script>
+</body>
+</html>
